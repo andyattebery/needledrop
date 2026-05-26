@@ -61,12 +61,12 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/andyattebery/needletrop:${{ steps.version.outputs.version }}
+          tags: ghcr.io/andyattebery/needledrop:${{ steps.version.outputs.version }}
       - name: Promote :latest
         if: steps.version.outputs.is_release == 'true'
         run: |
           docker buildx imagetools create \
-            -t ghcr.io/andyattebery/needletrop:latest \
-            ghcr.io/andyattebery/needletrop:${VERSION}
+            -t ghcr.io/andyattebery/needledrop:latest \
+            ghcr.io/andyattebery/needledrop:${VERSION}
         env:
           VERSION: ${{ steps.version.outputs.version }}
