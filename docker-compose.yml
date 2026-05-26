@@ -1,0 +1,16 @@
+services:
+  needledrop:
+    build: .
+    network_mode: host
+    ipc: host
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - audio
+    volumes:
+      - /etc/asound.conf:/etc/asound.conf:ro
+      - /etc/needledrop/config.yaml:/etc/needledrop/config.yaml:ro
+      - /media:/media
+    tmpfs:
+      - /run/needledrop
+    restart: unless-stopped

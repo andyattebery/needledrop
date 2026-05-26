@@ -1,0 +1,26 @@
+audio:
+  alsa_device: dsnoopusb
+  sample_rate: 48000
+  sample_duration_seconds: 12
+  silence_threshold_dbfs: -50.0
+
+recognition:
+  interval_seconds: 20
+  min_track_change_seconds: 30
+
+outputs:
+  lastfm:
+    enabled: true
+    api_key: "YOUR_API_KEY"
+    api_secret: "YOUR_API_SECRET"
+    username: "YOUR_USERNAME"
+    password_hash: "YOUR_MD5_PASSWORD_HASH"
+    scrobble_threshold_seconds: 30
+  owntone_metadata:
+    enabled: true
+    metadata_fifo: /media/Turntable.metadata
+  tuneshine:
+    enabled: true
+    host: "192.168.1.120"
+  log:
+    enabled: true
