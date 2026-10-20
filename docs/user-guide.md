@@ -3,7 +3,7 @@
 ## Requirements
 
 - Linux host with ALSA audio (e.g. Raspberry Pi 4)
-- Docker and Docker Compose
+- Docker and Docker Compose, or NixOS (see [NixOS setup](#nixos-setup))
 - An audio input device (USB audio interface, sound card) configured as a shared ALSA `dsnoop` device
 
 ## Installation
@@ -106,6 +106,93 @@ Key settings:
 - **`/media`** — mount point for OwnTone media directory (contains the metadata FIFO)
 - **`tmpfs` at `/run/needledrop`** — temporary WAV files are written here to avoid SD card wear
 
+## NixOS setup
+
+The repository is a flake. It provides the package and a NixOS module, `services.needledrop`, for `x86_64-linux` and `aarch64-linux`.
+
+Add it as an input and import the module:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    needledrop = {
+      url = "github:andyattebery/needledrop";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = { nixpkgs, needledrop, ... }: {
+    nixosConfigurations.turntable = nixpkgs.lib.nixosSystem {
+      modules = [
+        needledrop.nixosModules.default
+        ./configuration.nix
+      ];
+    };
+  };
+}
+```
+
+Then configure it. `settings` is `config.yaml` written in Nix, with the keys from [Configuration](#configuration):
+
+```nix
+services.needledrop = {
+  enable = true;
+  secretFiles = {
+    LASTFM_API_KEY = "/run/secrets/lastfm-api-key";
+    LASTFM_API_SECRET = "/run/secrets/lastfm-api-secret";
+    LASTFM_PASSWORD_HASH = "/run/secrets/lastfm-password-hash";
+  };
+  settings = {
+    audio.alsa_device = "dsnoopusb";
+    outputs = {
+      log.enabled = true;
+      owntone_metadata = {
+        enabled = true;
+        metadata_fifo = "/media/Turntable.metadata";
+      };
+      tuneshine = {
+        enabled = true;
+        host = "192.168.1.120";
+      };
+      lastfm = {
+        enabled = true;
+        api_key = "$LASTFM_API_KEY";
+        api_secret = "$LASTFM_API_SECRET";
+        username = "your-username";
+        password_hash = "$LASTFM_PASSWORD_HASH";
+      };
+    };
+  };
+};
+```
+
+`audio.alsa_device` is required. Unless you set them, the module uses `sample_rate` 48000, `sample_duration_seconds` 12, `interval_seconds` 20 and `min_track_change_seconds` 30.
+
+### Secrets
+
+`settings` ends up in the Nix store, which every user can read, so the Last.fm credentials don't belong in it. Keep each one in a file of its own, as sops-nix and agenix provide them, list the files in `secretFiles` by name, and refer to them in `settings` as `$NAME`, as above.
+
+At each start the service writes its config to `/run/needledrop` with the values substituted. That directory is memory-backed, and the file is readable only by the service. The files reach the service as systemd credentials, so the values never appear in the program's environment. A `$NAME` without a file stops the service from starting instead of becoming an empty string.
+
+### What the module sets up
+
+- A `needledrop` system user, and `needledrop.service`, which runs as that user with the `audio` group added.
+- `/run/needledrop`, memory-backed like the container's tmpfs, for the samples and the rendered config.
+- `arecord` and `ffmpeg` on the program's `PATH`, as in the container. `arecord` comes without ALSA's external plugins; `hw`, `dsnoop` and the other built-in device types work.
+- systemd sandboxing, which still leaves `/dev/snd` reachable and the host's IPC namespace shared, so a `dsnoop` device works.
+
+Two differences from the container:
+
+- **The service doesn't run as root.** If the `dsnoop` device is shared with a reader that runs as another user, such as an ALSA pipe service feeding OwnTone, its IPC objects have to admit the `audio` group. ALSA's default, `0600`, admits only the user that opened the device first. Add to the device's `asound.conf` entry:
+
+  ```
+  ipc_perm 0660
+  ipc_gid audio
+  ```
+
+- **The OwnTone metadata FIFO has to be writable by the `needledrop` user,** and can't be under `/home`, which the service can't see.
+
 ## Last.fm setup
 
 1. Create an API account at https://www.last.fm/api/account/create
@@ -122,7 +209,7 @@ Or with Python:
 python -c "import hashlib; print(hashlib.md5(b'your-password').hexdigest())"
 ```
 
-4. Add the credentials to your `config.yaml` under `outputs.lastfm`
+4. Add the credentials to your `config.yaml` under `outputs.lastfm`. On NixOS, see [Secrets](#secrets).
 
 Tracks are scrobbled when a new track is detected or playback stops, provided the previous track played for at least `scrobble_threshold_seconds`. Now-playing is updated immediately on each new track detection.
 

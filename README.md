@@ -11,11 +11,11 @@ Captures audio from an ALSA device, identifies tracks via [Shazam](https://www.s
 - [Tuneshine](https://tuneshine.rocks/) LED matrix display
 - Structured logging
 
-Designed to run on a Raspberry Pi in Docker alongside a vinyl playback setup.
+Designed to run on a Raspberry Pi alongside a vinyl playback setup, in Docker or as a NixOS service.
 
 ## Quick start
 
-See the [User Guide](docs/user-guide.md) for installation, configuration, and Docker setup.
+See the [User Guide](docs/user-guide.md) for installation, configuration, and Docker or NixOS setup.
 
 ## Development
 

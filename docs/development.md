@@ -47,21 +47,49 @@ needledrop/
 
 ## Running tests
 
-Requires Python 3.12+:
+Requires [uv](https://docs.astral.sh/uv/). `.python-version` pins Python 3.13, which uv downloads if it isn't installed:
 
 ```bash
-pip install ".[test]"
-pytest tests/ -v
+uv sync
+uv run pytest tests/ -v
 ```
 
 All external dependencies (Shazam, Last.fm, ALSA, HTTP, FIFO) are mocked — no hardware or network access needed.
 
+## Dependencies
+
+`uv.lock` pins every dependency, and it is the only place versions are pinned. The Docker image, the CI `test` job and the Nix package (through uv2nix) all install from it, so all three run the same versions. `pyproject.toml` keeps loose requirements.
+
+- After changing dependencies in `pyproject.toml`, run `uv lock` and commit both files. `--locked` makes CI and the Docker build fail if they disagree.
+- Dependabot opens one PR a month for each of `uv.lock`, `flake.lock` and the GitHub Actions versions, and each PR runs CI.
+- uv itself is pinned to 0.12.24 in the `Dockerfile` and `ci.yaml`. Change both together.
+- Python 3.13 is pinned in `.python-version` (uv, locally and in CI), the `Dockerfile`'s base image and `nix/package.nix`. Change all three together.
+
 ## CI
 
-The GitHub Actions workflow (`.github/workflows/ci.yaml`) has two jobs:
+The GitHub Actions workflow (`.github/workflows/ci.yaml`) has three jobs:
 
-- **test** — runs on every push and PR to `main`. Sets up Python 3.12, installs test deps, runs pytest.
-- **docker** — runs on semver tag pushes (e.g. `0.1.0`, `v0.1.0`), after tests pass. Builds multi-arch images (`linux/amd64`, `linux/arm64`), pushes to `ghcr.io/andyattebery/needledrop:<version>`, and promotes `:latest` for non-prerelease tags.
+- **test** — runs on every push and PR to `main`. Installs the locked environment and runs pytest.
+- **nix** — runs on every push and PR to `main`, on x86_64 and arm64 runners. `nix flake check` builds the package and runs the test suite against it. On x86_64 it also boots the NixOS module in a VM, which arm64 runners can't do because they have no KVM.
+- **docker** — runs on semver tag pushes (e.g. `0.1.0`, `v0.1.0`), after tests pass. It first checks that `pyproject.toml`'s version matches the tag. It then builds multi-arch images (`linux/amd64`, `linux/arm64`), pushes them to `ghcr.io/andyattebery/needledrop:<version>`, and promotes `:latest` unless the version is a pre-release.
+
+## Releasing
+
+1. Set the version with `uv version`, e.g. `uv version --bump minor` or `uv version 0.2.0`. It updates `pyproject.toml` and `uv.lock` together. Editing `pyproject.toml` by hand leaves the lock behind, and `--locked` then fails.
+2. Commit, tag the commit with the version (e.g. `0.2.0`), and push both.
+
+The docker job refuses a tag that doesn't match `pyproject.toml`'s version.
+
+## Nix packaging
+
+- `flake.nix` — the package, the NixOS module and the checks, for `x86_64-linux` and `aarch64-linux`.
+- `nix/package.nix` — builds the app with [uv2nix](https://github.com/pyproject-nix/uv2nix) from `uv.lock`, using the same wheels pip would install.
+  - `arecord` comes from `alsa-utils` built without nixpkgs' ALSA plugin bundle (pipewire, gstreamer, ffmpeg, …), which takes it from 812 MiB to 90 MiB.
+  - `hw`, `dsnoop` and `null` are built into alsa-lib, so capture doesn't need the plugins.
+- `nix/module.nix` — the `services.needledrop` NixOS module.
+- `nix/test.nix` — the NixOS VM test. It records from a silent `/dev/zero` device, so no recognition and no network.
+
+A release needs no change to the flake, which builds this repository's source and reads the version from `pyproject.toml`. Dependabot moves the flake's inputs in `flake.lock`. Moving to a new NixOS release branch is a manual edit of the `nixpkgs` URL in `flake.nix`.
 
 ## Adding a new output handler
 

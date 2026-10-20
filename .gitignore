@@ -10,3 +10,12 @@ build/
 .env
 test-music-clip.m4a
 .claude/settings.json
+
+# Nix build output links
+/result
+/result-*
+
+# agent working notes
+/plans/
+/tasks/
+/handoffs/
