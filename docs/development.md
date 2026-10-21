@@ -62,7 +62,7 @@ All external dependencies (Shazam, Last.fm, ALSA, HTTP, FIFO) are mocked — no 
 
 - After changing dependencies in `pyproject.toml`, run `uv lock` and commit both files. `--locked` makes CI and the Docker build fail if they disagree.
 - Dependabot opens one PR a month for each of `uv.lock`, `flake.lock` and the GitHub Actions versions, and each PR runs CI.
-- uv itself is pinned to 0.12.24 in the `Dockerfile` and `ci.yaml`. Change both together.
+- uv itself is pinned to 0.13.4 in the `Dockerfile` and `ci.yaml`, and `pyproject.toml` bounds `uv_build` to the same minor version, so uv builds the project with its bundled backend. Change all three together. Dependabot's uv PRs move the `uv_build` bound but not the two pins.
 - Python 3.13 is pinned in `.python-version` (uv, locally and in CI), the `Dockerfile`'s base image and `nix/package.nix`. Change all three together.
 
 ## CI

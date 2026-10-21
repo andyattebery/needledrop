@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
         with:
-          version: "0.12.24"
+          version: "0.13.4"
       - run: uv sync --locked
       - run: uv run --locked pytest tests/ -v
 
@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
         with:
-          version: "0.12.24"
+          version: "0.13.4"
       # Compared as PEP 440 versions: `uv version` writes 1.2.0-rc.1 as 1.2.0rc1, and both spellings are pre-releases.
       - name: Compute and check version
         id: version
