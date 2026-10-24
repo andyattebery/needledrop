@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:0.13.4-python3.13-trixie-slim AS builder
+FROM ghcr.io/astral-sh/uv:0.13.5-python3.13-trixie-slim AS builder
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_NO_DEV=1 UV_PYTHON_DOWNLOADS=0
 WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
