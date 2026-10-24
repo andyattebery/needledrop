@@ -24,3 +24,15 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    ignore:
+      # The final stage's Python must match the builder's, whose python3.13 tag suffix Dependabot never changes.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+    groups:
+      docker:
+        patterns: ["*"]

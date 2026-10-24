@@ -26,6 +26,8 @@ dev = [
     "pytest",
     "pytest-asyncio",
 ]
+# Never installed. Locking uv here lets Dependabot update it, and CI's setup-uv reads its version from uv.lock.
+uv = ["uv"]
 
 [tool.uv.build-backend]
 module-root = ""

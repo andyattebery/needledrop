@@ -61,16 +61,17 @@ All external dependencies (Shazam, Last.fm, ALSA, HTTP, FIFO) are mocked — no 
 `uv.lock` pins every dependency, and it is the only place versions are pinned. The Docker image, the CI `test` job and the Nix package (through uv2nix) all install from it, so all three run the same versions. `pyproject.toml` keeps loose requirements.
 
 - After changing dependencies in `pyproject.toml`, run `uv lock` and commit both files. `--locked` makes CI and the Docker build fail if they disagree.
-- Dependabot opens one PR a month for each of `uv.lock`, `flake.lock` and the GitHub Actions versions, and each PR runs CI.
-- uv itself is pinned to 0.13.4 in the `Dockerfile` and `ci.yaml`, and `pyproject.toml` bounds `uv_build` to the same minor version, so uv builds the project with its bundled backend. Change all three together. Dependabot's uv PRs move the `uv_build` bound but not the two pins.
-- Python 3.13 is pinned in `.python-version` (uv, locally and in CI), the `Dockerfile`'s base image and `nix/package.nix`. Change all three together.
+- Dependabot opens one PR a month for each of `uv.lock`, `flake.lock`, the GitHub Actions versions and the `Dockerfile`'s base images, and each PR runs CI.
+- uv's own version comes from `uv.lock`, where the `uv` dependency group locks it for CI's setup-uv to read, and from the tag of the `Dockerfile`'s builder image. `pyproject.toml` bounds `uv_build` to the same minor version, so uv builds the project with its bundled backend. Dependabot updates all three: the lock and the bound in its uv PR, the image tag in its docker PR.
+- Python 3.13 is pinned in `.python-version` (uv, locally and in CI), both of the `Dockerfile`'s base images and `nix/package.nix`. Change them together. Dependabot leaves it alone: it ignores Python minor and major updates and keeps the builder tag's `python3.13` suffix.
 
 ## CI
 
-The GitHub Actions workflow (`.github/workflows/ci.yaml`) has three jobs:
+The GitHub Actions workflow (`.github/workflows/ci.yaml`) has four jobs:
 
 - **test** — runs on every push and PR to `main`. Installs the locked environment and runs pytest.
 - **nix** — runs on every push and PR to `main`, on x86_64 and arm64 runners. `nix flake check` builds the package and runs the test suite against it. On x86_64 it also boots the NixOS module in a VM, which arm64 runners can't do because they have no KVM.
+- **image** — runs on every push and PR to `main`, on x86_64 and arm64 runners. Builds the Docker image and runs `needledrop --help` in it, without pushing, so a Dependabot bump of a base image is built before it reaches a release.
 - **docker** — runs on semver tag pushes (e.g. `0.1.0`, `v0.1.0`), after tests pass. It first checks that `pyproject.toml`'s version matches the tag. It then builds multi-arch images (`linux/amd64`, `linux/arm64`), pushes them to `ghcr.io/andyattebery/needledrop:<version>`, and promotes `:latest` unless the version is a pre-release.
 
 ## Releasing
