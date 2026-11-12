@@ -7,6 +7,7 @@ import pytest
 
 from needledrop.audio.capture import (
     FRAME_BYTES,
+    CaptureClock,
     CaptureError,
     RecentAudio,
     arecord_args,
@@ -121,3 +122,52 @@ def test_recent_audio_snapshot_is_shorter_before_it_fills():
     recent = RecentAudio(max_frames=150)
     recent.append(bytes(10 * FRAME_BYTES))
     assert len(recent.snapshot()) == 10 * FRAME_BYTES
+
+
+RATE = 48000
+CHUNK = 960  # 20 ms
+
+
+def bursty_arrivals(seconds: float, period_frames: int = 6000, ppm: float = 0.0, latency: float = 0.003):
+    """(true capture time, arrival time) for each 20 ms chunk when audio arrives a period at a time.
+
+    A period becomes readable once its last frame is captured, plus some latency; a chunk can be read
+    once the period that completes it has arrived. ``ppm`` makes the capture clock run slow.
+    """
+    frame_seconds = (1 + ppm / 1_000_000) / RATE
+    chunks = []
+    for i in range(int(seconds * RATE / CHUNK)):
+        completing_period = ((i + 1) * CHUNK + period_frames - 1) // period_frames
+        arrival = completing_period * period_frames * frame_seconds + latency
+        chunks.append((i * CHUNK * frame_seconds, arrival))
+    return chunks
+
+
+def test_capture_clock_spaces_bursty_arrivals_by_their_samples():
+    clock = CaptureClock(RATE)
+    chunks = bursty_arrivals(seconds=30)
+    stamps = [clock.stamp(CHUNK, arrival) for _, arrival in chunks]
+    settled = stamps[50:]  # after the first second
+    assert all(abs((b - a) - 0.02) < 1e-6 for a, b in zip(settled, settled[1:]))
+    assert all(abs(stamp - true) < 0.005 for stamp, (true, _) in zip(stamps[50:], chunks[50:]))
+
+
+def test_capture_clock_never_stamps_a_chunk_later_than_it_could_have_been_captured():
+    clock = CaptureClock(RATE)
+    for _, arrival in bursty_arrivals(seconds=5):
+        assert clock.stamp(CHUNK, arrival) <= arrival - 0.02 + 1e-9
+
+
+def test_capture_clock_follows_a_slow_capture_clock():
+    clock = CaptureClock(RATE)
+    chunks = bursty_arrivals(seconds=120, ppm=200)
+    stamps = [clock.stamp(CHUNK, arrival) for _, arrival in chunks]
+    assert all(abs(stamp - true) < 0.005 for stamp, (true, _) in zip(stamps[50:], chunks[50:]))
+
+
+def test_capture_clock_ignores_a_late_read():
+    clock = CaptureClock(RATE)
+    chunks = bursty_arrivals(seconds=10)
+    stalled = [(true, arrival + (0.3 if 200 <= i < 210 else 0.0)) for i, (true, arrival) in enumerate(chunks)]
+    stamps = [clock.stamp(CHUNK, arrival) for _, arrival in stalled]
+    assert all(abs(stamp - true) < 0.005 for stamp, (true, _) in zip(stamps[50:], stalled[50:]))

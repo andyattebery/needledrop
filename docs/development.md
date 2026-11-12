@@ -11,8 +11,12 @@ arecord (continuous) → 20 ms chunks ─┬─► level → playback detector �
                                                                      every output ◄────────────────────────────┘
 ```
 
-- **Capture**: one `arecord -t raw` subprocess (S16_LE stereo, 20 ms periods, up to a 4 s ALSA buffer) read in 20 ms
-  chunks. If it exits, playback counts as stopped and capture restarts after 2 s.
+- **Capture**: one `arecord -t raw` subprocess (S16_LE stereo) read in 20 ms chunks. It asks for 20 ms periods and a
+  4 s ALSA buffer, but a `dsnoop` device imposes its own (125 ms periods by default). If arecord exits, playback counts
+  as stopped and capture restarts after 2 s.
+- **Capture times**: arecord delivers a whole period at once, so arrival times come in bursts. `CaptureClock` stamps each
+  chunk from the sample count instead, anchored to the tightest arrival bound of the last 10 s, which also follows the
+  sound card's clock drift. A Sendspin server reads uneven timestamps as gaps and fills them with silence.
 - **Playback detection**: each chunk's RMS level against `silence_threshold_dbfs`. Playback starts after 0.1 s of sound
   and stops after `silence_hold_seconds` of silence, matching the sox silence filter that used to feed OwnTone's pipe.
 - **Recognition**: while a record plays, the latest `sample_duration_seconds` are written to `/run/needledrop/sample.wav`

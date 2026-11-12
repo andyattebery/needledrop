@@ -80,6 +80,38 @@ async def capture_stream(config: AudioConfig, chunk_frames: int) -> AsyncIterato
         stderr_task.cancel()
 
 
+class CaptureClock:
+    """Capture times for one capture stream's chunks, counted from its samples.
+
+    arecord hands over audio a period at a time, and a dsnoop device holds it to the slave's period
+    (125 ms by default), so arrival times come in bursts. Stamped on arrival, six 20 ms chunks would share
+    one time, which a Sendspin server reads as gaps. Each chunk's last sample was captured before the chunk
+    arrived, though, so every arrival bounds when the stream's first sample was captured. The tightest
+    bound from the last WINDOW_SECONDS anchors the sample count; letting older bounds age out makes the
+    anchor follow the capture clock's drift from the system clock.
+    """
+
+    WINDOW_SECONDS = 10.0
+
+    def __init__(self, sample_rate: int) -> None:
+        self._rate = sample_rate
+        self._frames = 0
+        # (arrival, bound) pairs in increasing order of bound: the first is the tightest in the window.
+        self._bounds: deque[tuple[float, float]] = deque()
+
+    def stamp(self, frames: int, arrival: float) -> float:
+        """The capture time of the first of ``frames`` frames that arrived at ``arrival``."""
+        bound = arrival - (self._frames + frames) / self._rate
+        while self._bounds and self._bounds[-1][1] >= bound:
+            self._bounds.pop()
+        self._bounds.append((arrival, bound))
+        while self._bounds[0][0] < arrival - self.WINDOW_SECONDS:
+            self._bounds.popleft()
+        captured_at = self._bounds[0][1] + self._frames / self._rate
+        self._frames += frames
+        return captured_at
+
+
 def write_wav(path: Path, pcm: bytes, sample_rate: int) -> None:
     with wave.open(str(path), "wb") as wav:
         wav.setnchannels(CHANNELS)

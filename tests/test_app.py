@@ -10,6 +10,7 @@ from needledrop.app import (
     Dispatcher,
     LoopState,
     build_outputs,
+    capture_loop,
     recognize,
     run_pipeline,
     safe_call,
@@ -17,6 +18,7 @@ from needledrop.app import (
     stop_outputs,
 )
 from needledrop.audio.capture import CaptureError, RecentAudio
+from needledrop.audio.level import PlaybackDetector
 from needledrop.models import AudioChunk, TrackInfo
 from needledrop.outputs.base import AudioOutput, ServiceOutput
 
@@ -410,3 +412,59 @@ async def test_recognize_gives_up_on_a_recognition_that_never_answers(sample_con
         )
     assert posts.posts == []
     assert "Recognition failed: timed out" in caplog.text
+
+
+class AudioPosts(Posts):
+    def __init__(self) -> None:
+        super().__init__()
+        self.chunks: list[AudioChunk] = []
+
+    def post_audio(self, chunk: AudioChunk) -> None:
+        self.chunks.append(chunk)
+
+
+def burst_arrivals(start: float, chunks: int) -> list[float]:
+    """When each 20 ms chunk becomes readable if audio arrives in 6000-frame (125 ms) periods."""
+    return [start + ((i + 1) * 960 + 5999) // 6000 * 0.125 + 0.003 for i in range(chunks)]
+
+
+def timed_capture(now: list[float], *runs: list[float]):
+    """A capture_stream stand-in that delivers LOUD chunks at the given arrival times, one run per call."""
+    pending = list(runs)
+
+    async def capture(config, chunk_frames):
+        if not pending:
+            await asyncio.Event().wait()
+        for arrival in pending.pop(0):
+            now[0] = arrival
+            yield LOUD
+            await asyncio.sleep(0)
+        raise CaptureError("arecord exited with status 1: gone")
+
+    return capture
+
+
+async def run_capture_loop(config, capture, now, posts, until):
+    detector = PlaybackDetector(threshold_dbfs=-50.0, sample_rate=48000, start_seconds=0.1, stop_seconds=5.0)
+    await run_until(
+        capture_loop(config, capture, detector, RecentAudio(960), posts, LoopState(), asyncio.Queue(),
+                     now=lambda: now[0]),
+        until,
+    )
+
+
+async def test_capture_loop_stamps_bursty_chunks_by_their_samples(sample_config):
+    now, posts = [0.0], AudioPosts()
+    arrivals = burst_arrivals(0.0, 500)
+    await run_capture_loop(sample_config, timed_capture(now, arrivals), now, posts,
+                           lambda: len(posts.chunks) == 500)
+    stamps = [chunk.captured_at for chunk in posts.chunks][50:]
+    assert all(abs((b - a) - 0.02) < 1e-6 for a, b in zip(stamps, stamps[1:]))
+
+
+@patch("needledrop.app.CAPTURE_RETRY_SECONDS", 0)
+async def test_capture_loop_restarts_its_clock_with_the_capture(sample_config):
+    now, posts = [0.0], AudioPosts()
+    capture = timed_capture(now, burst_arrivals(0.0, 50), burst_arrivals(5.0, 50))
+    await run_capture_loop(sample_config, capture, now, posts, lambda: len(posts.chunks) == 100)
+    assert abs(posts.chunks[50].captured_at - 5.0) < 0.15

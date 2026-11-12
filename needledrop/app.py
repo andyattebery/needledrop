@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import aiohttp
 from needledrop.audio.capture import (
     FRAME_BYTES,
     SAMPLE_PATH,
+    CaptureClock,
     CaptureError,
     RecentAudio,
     capture_stream,
@@ -191,6 +193,7 @@ async def capture_loop(
     dispatcher: Dispatcher,
     state: LoopState,
     transitions: asyncio.Queue[Transition],
+    now: Callable[[], float] = time.monotonic,
 ) -> None:
     """Read the capture, detect playback, keep the recognition window, and feed audio outputs.
 
@@ -199,10 +202,12 @@ async def capture_loop(
     rate = config.audio.sample_rate
     chunk_frames = round(rate * CHUNK_SECONDS)
     while True:
+        # Each capture is a new stream, with its own first sample to count from.
+        clock = CaptureClock(rate)
         try:
             async for pcm in capture(config.audio, chunk_frames):
                 frames = len(pcm) // FRAME_BYTES
-                captured_at = time.monotonic() - frames / rate
+                captured_at = clock.stamp(frames, now())
                 transition = detector.update(chunk_dbfs(pcm), frames)
                 if transition is not None:
                     _apply_transition(transition, dispatcher, state, transitions)
