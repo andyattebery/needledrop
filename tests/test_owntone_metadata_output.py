@@ -1,6 +1,9 @@
 import asyncio
 import base64
 import logging
+import os
+import threading
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -91,32 +94,70 @@ async def test_artwork_download_failure_logged(mock_session, caplog):
     assert "Failed to download artwork" in caplog.text
 
 
-async def test_fifo_timeout_logged(mock_session, caplog):
-    output = OwnToneMetadataOutput(metadata_fifo="/tmp/fifo", session=mock_session)
-    track = TrackInfo(title="Song", artist="Artist", album=None, artwork_url=None)
+@pytest.fixture
+def fifo(tmp_path):
+    path = tmp_path / "Turntable.metadata"
+    os.mkfifo(path)
+    return path
 
-    with patch(
-        "needledrop.outputs.owntone_metadata.asyncio.to_thread",
-        side_effect=asyncio.TimeoutError,
-    ), patch(
-        "needledrop.outputs.owntone_metadata.asyncio.wait_for",
-        side_effect=asyncio.TimeoutError,
-    ), caplog.at_level(logging.WARNING):
+
+def read_all(fd: int) -> bytes:
+    data = b""
+    while True:
+        try:
+            block = os.read(fd, 1 << 20)
+        except BlockingIOError:
+            return data
+        if not block:
+            return data
+        data += block
+
+
+async def test_track_info_reaches_a_reading_owntone(mock_session, fifo):
+    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        output = OwnToneMetadataOutput(metadata_fifo=str(fifo), session=mock_session)
+        await output.on_track_recognized(TrackInfo(title="Song", artist="Artist"))
+        written = read_all(reader).decode()
+    finally:
+        os.close(reader)
+    assert written == _build_item(TYPE_CORE, CODE_TITLE, b"Song") + _build_item(TYPE_CORE, CODE_ARTIST, b"Artist")
+
+
+async def test_without_a_reader_writes_are_skipped_at_once(mock_session, fifo, caplog):
+    output = OwnToneMetadataOutput(metadata_fifo=str(fifo), session=mock_session)
+    track = TrackInfo(title="Song", artist="Artist", album="Album")
+    threads_before = threading.active_count()
+    start = time.monotonic()
+    with caplog.at_level(logging.INFO):
         await output.on_track_recognized(track)
-    assert "FIFO write timed out" in caplog.text
-
-
-async def test_fifo_oserror_logged(mock_session, caplog):
-    output = OwnToneMetadataOutput(metadata_fifo="/tmp/fifo", session=mock_session)
-    track = TrackInfo(title="Song", artist="Artist", album=None, artwork_url=None)
-
-    with patch.object(
-        output, "_write_to_fifo", side_effect=OSError("broken pipe")
-    ), patch(
-        "needledrop.outputs.owntone_metadata.asyncio.wait_for",
-        side_effect=OSError("broken pipe"),
-    ), caplog.at_level(logging.WARNING):
         await output.on_track_recognized(track)
+    assert time.monotonic() - start < 0.5
+    assert caplog.text.count("OwnTone isn't reading its metadata pipe") == 1
+    assert "FIFO write failed" not in caplog.text
+    assert threading.active_count() <= threads_before + 1
+
+
+async def test_a_reader_that_stops_reading_times_out_without_holding_a_thread(mock_session, fifo, caplog):
+    mock_session.get.return_value.__aenter__.return_value.read = AsyncMock(return_value=bytes(300_000))
+    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)  # open, but never read
+    try:
+        output = OwnToneMetadataOutput(metadata_fifo=str(fifo), session=mock_session)
+        track = TrackInfo(title="Song", artist="Artist", artwork_url="https://example.com/art.jpg")
+        start = time.monotonic()
+        with patch("needledrop.outputs.owntone_metadata.FIFO_TIMEOUT", 0.2), caplog.at_level(logging.WARNING):
+            await output.on_track_recognized(track)
+        elapsed = time.monotonic() - start
+    finally:
+        os.close(reader)
+    assert elapsed < 1.0
+    assert "FIFO write failed: OwnTone stopped reading" in caplog.text
+
+
+async def test_a_missing_pipe_is_logged(mock_session, tmp_path, caplog):
+    output = OwnToneMetadataOutput(metadata_fifo=str(tmp_path / "missing"), session=mock_session)
+    with caplog.at_level(logging.WARNING):
+        await output.on_track_recognized(TrackInfo(title="Song", artist="Artist"))
     assert "FIFO write failed" in caplog.text
 
 

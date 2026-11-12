@@ -1,6 +1,10 @@
 import asyncio
 import base64
+import errno
 import logging
+import os
+import select
+import time
 
 import aiohttp
 
@@ -31,6 +35,7 @@ class OwnToneMetadataOutput:
     def __init__(self, metadata_fifo: str, session: aiohttp.ClientSession) -> None:
         self._fifo = metadata_fifo
         self._session = session
+        self._owntone_not_reading = False
 
     async def on_track_recognized(self, track: TrackInfo) -> None:
         await self._write_item(TYPE_CORE, CODE_TITLE, track.title.encode("utf-8"))
@@ -62,15 +67,34 @@ class OwnToneMetadataOutput:
     async def _write_item(self, type_hex: str, code_hex: str, data: bytes) -> None:
         item = _build_item(type_hex, code_hex, data)
         try:
-            await asyncio.wait_for(
-                asyncio.to_thread(self._write_to_fifo, item),
-                timeout=FIFO_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            logger.warning("FIFO write timed out")
+            await asyncio.to_thread(self._write_to_fifo, item)
         except OSError as e:
+            if e.errno == errno.ENXIO:
+                # OwnTone reads the pipe only while it plays the turntable.
+                if not self._owntone_not_reading:
+                    logger.info("OwnTone isn't reading its metadata pipe %s; skipping track info", self._fifo)
+                    self._owntone_not_reading = True
+                return
             logger.warning("FIFO write failed: %s", e)
+            return
+        self._owntone_not_reading = False
 
     def _write_to_fifo(self, item: str) -> None:
-        with open(self._fifo, "w") as f:
-            f.write(item)
+        """Write one item, giving up on OwnTone after FIFO_TIMEOUT, so no thread is held longer.
+
+        Opening without blocking fails at once (ENXIO) while nothing reads the pipe; a blocking open
+        would hold its thread until OwnTone next plays the turntable.
+        """
+        fd = os.open(self._fifo, os.O_WRONLY | os.O_NONBLOCK)
+        try:
+            remaining = memoryview(item.encode("utf-8"))
+            deadline = time.monotonic() + FIFO_TIMEOUT
+            while remaining:
+                try:
+                    remaining = remaining[os.write(fd, remaining) :]
+                except BlockingIOError:
+                    wait = deadline - time.monotonic()
+                    if wait <= 0 or not select.select([], [fd], [], wait)[1]:
+                        raise TimeoutError(f"OwnTone stopped reading {self._fifo}") from None
+        finally:
+            os.close(fd)

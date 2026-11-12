@@ -261,7 +261,8 @@ OwnTone plays the named pipes it finds in its library. needledrop feeds two of t
   the end of the stream. needledrop never waits on the pipe: while OwnTone isn't reading it, the audio is dropped and
   needledrop retries once a second.
 - **Metadata** (`owntone_metadata`): track information, which OwnTone shows for the stream. Artwork is downloaded and
-  written as a base64-encoded PICT item.
+  written as a base64-encoded PICT item. OwnTone reads this pipe only while it plays the turntable, so needledrop skips
+  the track information at other times instead of waiting for OwnTone.
 
 Create both FIFOs in OwnTone's library (e.g. `/media/Turntable` and `/media/Turntable.metadata`) before OwnTone scans it.
 The metadata pipe's name has to be the audio pipe's name with `.metadata` appended.

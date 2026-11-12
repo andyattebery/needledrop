@@ -5,6 +5,7 @@ import socket
 import stat
 import struct
 import time
+from unittest.mock import patch
 
 import pytest
 from aiosendspin.noise import Identity
@@ -154,3 +155,49 @@ async def test_a_signal_change_during_a_report_is_reported_next(tmp_path):
     await first
     await output._sync_signal()
     assert sent == [SignalState.ABSENT, SignalState.PRESENT]
+
+
+async def test_a_server_connecting_while_the_listener_starts_reaches_the_client(tmp_path, caplog):
+    attached = []
+
+    class Client:
+        _admitted_connection = None
+        server_info = None
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def add_server_command_listener(self, callback):
+            pass
+
+        def add_disconnect_listener(self, callback):
+            pass
+
+        async def attach_websocket(self, ws):
+            attached.append(ws)
+
+        async def disconnect(self):
+            pass
+
+    class EagerListener:
+        """A listener a server connects to before start() has returned, as mDNS registration takes a while."""
+
+        def __init__(self, client_id, on_connection, **kwargs):
+            self._on_connection = on_connection
+
+        async def start(self):
+            await self._on_connection("ws")
+
+        async def stop(self):
+            pass
+
+    output = SendspinOutput(SendspinConfig(state_dir=str(tmp_path)), sample_rate=48000)
+    with (
+        patch("needledrop.outputs.sendspin.SendspinClient", Client),
+        patch("needledrop.outputs.sendspin.ClientListener", EagerListener),
+        caplog.at_level(logging.WARNING),
+    ):
+        await output.start()
+        await output.stop()
+    assert attached == ["ws"]
+    assert "Sendspin connection failed" not in caplog.text

@@ -112,6 +112,9 @@ class SendspinOutput:
         )
         client.add_server_command_listener(self._on_server_command)
         client.add_disconnect_listener(self._on_disconnect)
+        # Ready before the listener starts: a server that knows this device can connect while the
+        # mDNS registration inside start() is still under way.
+        self._client, self.client_id = client, identity.peer_id
         listener = ClientListener(
             client_id=identity.peer_id,
             on_connection=self._on_connection,
@@ -121,7 +124,7 @@ class SendspinOutput:
         )
         await listener.start()
 
-        self._client, self._listener, self.client_id = client, listener, identity.peer_id
+        self._listener = listener
         self._spawn(self._sync_signal_forever())
         logger.info(
             "Sendspin source %r is waiting for a server on port %d (client ID %s)",
