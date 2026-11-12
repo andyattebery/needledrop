@@ -6,6 +6,7 @@ from needledrop.config import (
     LastFMConfig,
     LogConfig,
     OutputsConfig,
+    OwnToneAudioConfig,
     OwnToneMetadataConfig,
     RecognitionConfig,
     TuneshineConfig,
@@ -112,3 +113,43 @@ def test_audio_silence_hold_defaults_to_five_seconds():
     })
     assert result.silence_hold_seconds == 5.0
 
+
+def test_load_config_defaults_new_outputs_to_disabled(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("""
+audio:
+  alsa_device: hw:0
+  sample_rate: 48000
+  sample_duration_seconds: 12
+recognition:
+  interval_seconds: 20
+  min_track_change_seconds: 30
+outputs:
+  log:
+    enabled: true
+""")
+    config = load_config(config_file)
+    assert config.outputs.owntone_audio == OwnToneAudioConfig(enabled=False, audio_fifo="")
+
+
+def test_load_config_parses_owntone_audio(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("""
+audio:
+  alsa_device: hw:0
+  sample_rate: 48000
+  sample_duration_seconds: 12
+  silence_hold_seconds: 8
+recognition:
+  interval_seconds: 20
+  min_track_change_seconds: 30
+outputs:
+  owntone_audio:
+    enabled: true
+    audio_fifo: /srv/media/Turntable
+""")
+    config = load_config(config_file)
+    assert config.audio.silence_hold_seconds == 8
+    assert config.outputs.owntone_audio == OwnToneAudioConfig(
+        enabled=True, audio_fifo="/srv/media/Turntable"
+    )

@@ -18,6 +18,7 @@ from needledrop.app import (
 )
 from needledrop.audio.capture import CaptureError, RecentAudio
 from needledrop.models import AudioChunk, TrackInfo
+from needledrop.outputs.base import AudioOutput
 
 LOUD = struct.pack("<2h", 3000, -3000) * 960  # one 20 ms chunk at 48 kHz, about -20.8 dBFS
 QUIET = bytes(960 * 4)
@@ -139,6 +140,15 @@ async def test_build_outputs_disabled(mock_network, sample_config, mock_session)
     sample_config.outputs.tuneshine.enabled = False
     outputs = build_outputs(sample_config, mock_session)
     assert len(outputs) == 2
+
+
+@patch("needledrop.outputs.lastfm.pylast.LastFMNetwork")
+async def test_build_outputs_adds_owntone_audio(mock_network, sample_config, mock_session):
+    sample_config.outputs.owntone_audio.enabled = True
+    sample_config.outputs.owntone_audio.audio_fifo = "/srv/media/Turntable"
+    outputs = build_outputs(sample_config, mock_session)
+    assert type(outputs[-1]).__name__ == "OwnToneAudioOutput"
+    assert isinstance(outputs[-1], AudioOutput)
 
 
 async def test_safe_call_catches_exceptions(caplog):

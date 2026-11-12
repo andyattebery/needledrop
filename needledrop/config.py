@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -36,6 +36,12 @@ class OwnToneMetadataConfig:
 
 
 @dataclass
+class OwnToneAudioConfig:
+    enabled: bool = False
+    audio_fifo: str = ""
+
+
+@dataclass
 class TuneshineConfig:
     enabled: bool = False
     host: str = ""
@@ -52,6 +58,7 @@ class OutputsConfig:
     owntone_metadata: OwnToneMetadataConfig
     tuneshine: TuneshineConfig
     log: LogConfig
+    owntone_audio: OwnToneAudioConfig = field(default_factory=OwnToneAudioConfig)
 
 
 @dataclass
@@ -80,6 +87,7 @@ def load_config(path: Path) -> Config:
         ),
         tuneshine=_build_dataclass(TuneshineConfig, outputs_raw.get("tuneshine")),
         log=_build_dataclass(LogConfig, outputs_raw.get("log")),
+        owntone_audio=_build_dataclass(OwnToneAudioConfig, outputs_raw.get("owntone_audio")),
     )
 
     return Config(

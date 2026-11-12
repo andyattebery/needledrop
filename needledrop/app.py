@@ -21,6 +21,7 @@ from needledrop.models import AudioChunk, TrackInfo
 from needledrop.outputs.base import AudioOutput, OutputHandler, ServiceOutput
 from needledrop.outputs.lastfm import LastFMOutput
 from needledrop.outputs.log import LogOutput
+from needledrop.outputs.owntone_audio import OwnToneAudioOutput
 from needledrop.outputs.owntone_metadata import OwnToneMetadataOutput
 from needledrop.outputs.tuneshine import TuneshineOutput
 from needledrop.recognition.shazamio_recognizer import ShazamIORecognizer
@@ -80,6 +81,9 @@ def build_outputs(config: Config, session: aiohttp.ClientSession) -> list[Output
 
     if cfg.log.enabled:
         outputs.append(LogOutput())
+
+    if cfg.owntone_audio.enabled:
+        outputs.append(OwnToneAudioOutput(audio_fifo=cfg.owntone_audio.audio_fifo))
 
     return outputs
 

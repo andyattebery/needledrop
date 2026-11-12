@@ -162,6 +162,8 @@ in
         UMask = "0077";
         Restart = "on-failure";
         RestartSec = 10;
+        # The capture feeds OwnTone's pipe live, as the pipe service it replaced did at the same priority.
+        Nice = -5;
 
         # Not set: PrivateDevices hides /dev/snd (DeviceAllow admits only ALSA devices instead), PrivateIPC would cut the
         # service off from a dsnoop device shared with other readers, and PrivateUsers drops the audio group.
