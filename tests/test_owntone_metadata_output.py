@@ -123,3 +123,10 @@ async def test_fifo_oserror_logged(mock_session, caplog):
 async def test_on_playback_stopped_is_noop(mock_session):
     output = OwnToneMetadataOutput(metadata_fifo="/tmp/fifo", session=mock_session)
     await output.on_playback_stopped()
+
+
+async def test_on_playback_started_writes_nothing(mock_session):
+    output = OwnToneMetadataOutput(metadata_fifo="/tmp/fifo", session=mock_session)
+    with patch.object(output, "_write_item") as write_item:
+        await output.on_playback_started()
+    write_item.assert_not_called()

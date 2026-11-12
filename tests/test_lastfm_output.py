@@ -113,3 +113,9 @@ async def test_scrobble_error_logged(lastfm_output, caplog):
     with caplog.at_level(logging.WARNING):
         await lastfm_output.on_track_recognized(new)
     assert "Last.fm scrobble failed" in caplog.text
+
+
+async def test_playback_started_calls_nothing(lastfm_output):
+    await lastfm_output.on_playback_started()
+    lastfm_output._network.update_now_playing.assert_not_called()
+    lastfm_output._network.scrobble.assert_not_called()

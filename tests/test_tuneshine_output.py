@@ -124,3 +124,9 @@ async def test_delete_failure_logged(tuneshine, mock_session, caplog):
     with caplog.at_level(logging.WARNING):
         await tuneshine.on_playback_stopped()
     assert "Tuneshine DELETE /image" in caplog.text
+
+
+async def test_on_playback_started_sends_nothing(tuneshine, mock_session):
+    await tuneshine.on_playback_started()
+    mock_session.post.assert_not_called()
+    mock_session.delete.assert_not_called()

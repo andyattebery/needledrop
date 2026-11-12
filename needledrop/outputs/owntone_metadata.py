@@ -42,6 +42,9 @@ class OwnToneMetadataOutput:
         if track.artwork_url:
             await self._write_artwork(track.artwork_url)
 
+    async def on_playback_started(self) -> None:
+        pass
+
     async def on_playback_stopped(self) -> None:
         pass
 

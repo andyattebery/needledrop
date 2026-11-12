@@ -18,3 +18,12 @@ class TrackInfo:
 
     def __hash__(self) -> int:
         return hash((self.title, self.artist))
+
+
+@dataclass(frozen=True)
+class AudioChunk:
+    """Captured S16_LE stereo PCM at audio.sample_rate."""
+
+    pcm: bytes
+    captured_at: float
+    """time.monotonic() when the chunk's first sample was captured."""

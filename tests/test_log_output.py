@@ -27,3 +27,10 @@ async def test_none_album_formats(caplog):
         await output.on_track_recognized(track)
     assert "Song" in caplog.text
     assert "None" in caplog.text
+
+
+async def test_on_playback_started_logs(caplog):
+    output = LogOutput()
+    with caplog.at_level(logging.INFO):
+        await output.on_playback_started()
+    assert "Playback started" in caplog.text

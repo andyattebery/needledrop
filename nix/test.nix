@@ -6,14 +6,17 @@
   nodes.machine = {
     imports = [ self.nixosModules.default ];
 
-    # The VM has no sound hardware. This device reads silence from /dev/zero; ALSA's `null` device leaves arecord's
-    # buffer as it was, which needledrop then tries to recognise.
+    # The VM has no sound hardware. snd-dummy is a sound card paced by a kernel timer, and this device swaps what it
+    # captures for /dev/urandom: noise loud enough to start playback, so recognition runs (and fails, with no network
+    # here). ALSA's `null` device can't stand in: it isn't paced, and a continuous capture from it reads as fast as the
+    # CPU allows.
+    boot.kernelModules = [ "snd-dummy" ];
     environment.etc."asound.conf".text = ''
-      pcm.silence {
+      pcm.noise {
         type file
-        slave.pcm "null"
+        slave.pcm "hw:Dummy"
         file "/dev/null"
-        infile "/dev/zero"
+        infile "/dev/urandom"
         format "raw"
       }
     '';
@@ -25,7 +28,7 @@
       secretFiles.TUNESHINE_HOST = "/etc/needledrop-test-secret";
       settings = {
         audio = {
-          alsa_device = "silence";
+          alsa_device = "noise";
           sample_duration_seconds = 1;
         };
         recognition.interval_seconds = 1;
@@ -42,13 +45,18 @@
 
   testScript = ''
     machine.wait_for_unit("needledrop.service")
-    machine.wait_until_succeeds("test -s /run/needledrop/sample.wav")
 
     machine.succeed("grep -q example.invalid /run/needledrop/config.yaml")
     machine.fail("grep -q TUNESHINE_HOST /run/needledrop/config.yaml")
     machine.fail("grep -qa TUNESHINE_HOST /proc/$(systemctl show -p MainPID --value needledrop.service)/environ")
 
     machine.wait_until_succeeds("journalctl -u needledrop.service | grep -q 'Started with 1 output(s)'")
+    machine.wait_until_succeeds("journalctl -u needledrop.service | grep -q 'Playback started'")
+
+    # Recognition writes its window and, without network, fails with a warning rather than a traceback.
+    machine.wait_until_succeeds("test -s /run/needledrop/sample.wav")
+    machine.wait_until_succeeds("journalctl -u needledrop.service | grep -q 'Recognition failed'")
+
     machine.sleep(5)
     machine.fail("journalctl -u needledrop.service | grep -E 'Audio capture failed|Traceback'")
     machine.succeed("systemctl is-active needledrop.service")

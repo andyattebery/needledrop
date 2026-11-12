@@ -33,6 +33,9 @@ class TuneshineOutput:
 
         await self._post_json(metadata)
 
+    async def on_playback_started(self) -> None:
+        pass
+
     async def on_playback_stopped(self) -> None:
         try:
             await self._session.delete(

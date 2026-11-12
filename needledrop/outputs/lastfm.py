@@ -45,6 +45,9 @@ class LastFMOutput:
         self._prev_track = track
         self._prev_recognized_at = track.recognized_at
 
+    async def on_playback_started(self) -> None:
+        pass
+
     async def on_playback_stopped(self) -> None:
         await self._maybe_scrobble_previous()
         self._prev_track = None

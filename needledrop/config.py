@@ -10,6 +10,7 @@ class AudioConfig:
     sample_rate: int
     sample_duration_seconds: int
     silence_threshold_dbfs: float = -50.0
+    silence_hold_seconds: float = 5.0
 
 
 @dataclass

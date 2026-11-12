@@ -102,3 +102,13 @@ outputs:
     config = load_config(config_file)
     assert config.outputs.lastfm.enabled is False
     assert config.outputs.tuneshine.host == ""
+
+
+def test_audio_silence_hold_defaults_to_five_seconds():
+    result = _build_dataclass(AudioConfig, {
+        "alsa_device": "hw:0",
+        "sample_rate": 48000,
+        "sample_duration_seconds": 12,
+    })
+    assert result.silence_hold_seconds == 5.0
+
