@@ -3,6 +3,7 @@ audio:
   sample_rate: 48000
   sample_duration_seconds: 12
   silence_threshold_dbfs: -50.0
+  silence_hold_seconds: 5.0
 
 recognition:
   interval_seconds: 20
@@ -16,9 +17,18 @@ outputs:
     username: "YOUR_USERNAME"
     password_hash: "YOUR_MD5_PASSWORD_HASH"
     scrobble_threshold_seconds: 30
+  owntone_audio:
+    enabled: true
+    audio_fifo: /media/Turntable
   owntone_metadata:
     enabled: true
     metadata_fifo: /media/Turntable.metadata
+  sendspin:
+    enabled: true
+    name: Turntable
+    port: 8928
+    state_dir: /var/lib/needledrop
+    unpaired_access: true
   tuneshine:
     enabled: true
     host: "192.168.1.120"

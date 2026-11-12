@@ -2,17 +2,30 @@
 
 ## Architecture
 
-needledrop runs a single async loop:
+needledrop captures without a break, and everything else hangs off that one stream:
 
 ```
-capture audio → check silence → recognize via Shazam → de-duplicate → dispatch to outputs
+arecord (continuous) → 20 ms chunks ─┬─► level → playback detector → playback_started / playback_stopped ─┐
+                                     ├─► recent window → Shazam while playing → de-duplicate → track_recognized ┤
+                                     └─► audio outputs (owntone_audio, sendspin)                               │
+                                                                     every output ◄────────────────────────────┘
 ```
 
-- **Capture**: `arecord` subprocess writes a WAV sample to tmpfs
-- **Silence detection**: `pydub` checks if the sample's dBFS is below the configured threshold. If silent and was previously playing, dispatches `on_playback_stopped` to all outputs. No recognition attempt is made on silent samples.
-- **Recognition**: `shazamio` identifies the track from the WAV file
-- **De-duplication**: if the same (title, artist) was recognized within `min_track_change_seconds`, the result is dropped
-- **Dispatch**: `on_track_recognized` is called on every enabled output handler, each wrapped in `safe_call` so one failure doesn't block the others
+- **Capture**: one `arecord -t raw` subprocess (S16_LE stereo, 20 ms periods, up to a 4 s ALSA buffer) read in 20 ms
+  chunks. If it exits, playback counts as stopped and capture restarts after 2 s.
+- **Playback detection**: each chunk's RMS level against `silence_threshold_dbfs`. Playback starts after 0.1 s of sound
+  and stops after `silence_hold_seconds` of silence, matching the sox silence filter that used to feed OwnTone's pipe.
+- **Recognition**: while a record plays, the latest `sample_duration_seconds` are written to `/run/needledrop/sample.wav`
+  and `shazamio` identifies them. The first attempt comes once the window has filled, then one every `interval_seconds`.
+  A failure, or no answer within 60 s, is logged and the next attempt goes ahead. A result that arrives after playback
+  stopped is dropped.
+- **De-duplication**: if the same (title, artist) was recognized within `min_track_change_seconds`, the result is dropped.
+- **Dispatch**: the `Dispatcher` gives each output its own worker: a queue of events, and for outputs that take audio, a
+  queue holding 2 s of audio. A slow or failing output delays or loses only its own deliveries. An audio output that
+  falls behind loses its oldest chunks. Event calls are wrapped in `safe_call`. A failing audio output is logged at most
+  once a minute, since it gets fifty chunks a second.
+
+The capture task does only cheap work (level, window, enqueueing), so no output can make the capture overrun.
 
 A single `aiohttp.ClientSession` is created in `run()` and shared across all output handlers that need HTTP access.
 
@@ -21,29 +34,44 @@ A single `aiohttp.ClientSession` is created in `run()` and shared across all out
 ```
 needledrop/
 ├── __main__.py              CLI entrypoint (argparse, logging setup)
-├── app.py                   Main loop (run, tick, build_outputs, LoopState)
+├── app.py                   Pipeline (run, capture_loop, recognition_loop, recognize, Dispatcher, build_outputs)
 ├── config.py                YAML config loading, typed dataclasses
-├── models.py                TrackInfo dataclass (eq/hash on title+artist)
+├── models.py                TrackInfo (eq/hash on title+artist), AudioChunk
 ├── audio/
-│   └── capture.py           arecord subprocess, silence detection (pydub)
+│   ├── capture.py           continuous arecord stream, recognition window, WAV writer
+│   └── level.py             chunk level (dBFS) and the playback detector
 ├── recognition/
 │   ├── base.py              Recognizer protocol
 │   └── shazamio_recognizer.py  Shazam implementation
 └── outputs/
-    ├── base.py              OutputHandler protocol
+    ├── base.py              OutputHandler, AudioOutput and ServiceOutput protocols
     ├── lastfm.py            Last.fm scrobble/now-playing (pylast via to_thread)
     ├── log.py               Structured logging
+    ├── owntone_audio.py     The turntable into OwnTone's pipe while a record plays
     ├── owntone_metadata.py  FIFO metadata pipe (base64 XML items)
+    ├── sendspin.py          Sendspin source (aiosendspin) for Music Assistant
     └── tuneshine.py         HTTP POST with 64x64 WebP artwork
 ```
 
 ## Key design decisions
 
-- **Silence-based play detection** — needledrop detects whether audio is playing by measuring dBFS of captured samples, rather than querying OwnTone's API. This keeps it independent of the playback server.
+- **One continuous capture** — the OwnTone pipe and the Sendspin source need the audio itself, and both need to know
+  within a second when a record starts. A single stream serves the detector, recognition and the audio outputs, so
+  nothing else has to share the input device.
+- **Silence-based play detection** — needledrop detects whether audio is playing by measuring the level of what it
+  captures, rather than querying OwnTone's API. This keeps it independent of the playback server.
 - **De-duplication on (title, artist)** — `TrackInfo.__eq__` and `__hash__` use only title and artist. Album and artwork differences don't trigger a new dispatch.
-- **safe_call wrapping** — each output handler call is wrapped in try/except. One output failing (e.g. network timeout to Tuneshine) doesn't prevent other outputs (e.g. Last.fm) from running.
+- **A worker per output** — each output's calls are wrapped in try/except and delivered on that output's own tasks. One
+  output failing or stalling (e.g. a network timeout to Tuneshine) doesn't delay the others, such as the OwnTone pipe
+  that has to open when a record starts.
 - **tmpfs for WAV** — samples are written to `/run/needledrop/sample.wav` (tmpfs) to avoid SD card wear on the Raspberry Pi.
-- **Protocol-based outputs** — output handlers implement `OutputHandler` via structural subtyping (Python `Protocol`), not inheritance. Any class with `on_track_recognized` and `on_playback_stopped` async methods works.
+- **Protocol-based outputs** — output handlers implement the protocols in `outputs/base.py` structurally (Python
+  `Protocol`), not by inheritance. See [Adding a new output handler](#adding-a-new-output-handler).
+- **Sendspin's signal goes through a private attribute** — aiosendspin reports a source's signal only on the connection
+  object, which `SendspinClient` keeps private. `_admitted_connection()` in `outputs/sendspin.py` is the one place that
+  reaches for it, and `pyproject.toml` bounds aiosendspin to 10.x. Check it on every major upgrade.
+- **Sendspin sends PCM** — every server accepts it, and it needs no PyAV. FLAC would need the `aiosendspin[source]`
+  extra.
 
 ## Running tests
 
@@ -54,7 +82,8 @@ uv sync
 uv run pytest tests/ -v
 ```
 
-All external dependencies (Shazam, Last.fm, ALSA, HTTP, FIFO) are mocked — no hardware or network access needed.
+Shazam, Last.fm, ALSA and HTTP are mocked. The OwnTone audio tests use real FIFOs in a temporary directory, and the
+Sendspin tests run an aiosendspin server in-process on localhost. No hardware or network access is needed.
 
 ## Dependencies
 
@@ -88,22 +117,34 @@ The docker job refuses a tag that doesn't match `pyproject.toml`'s version.
   - `arecord` comes from `alsa-utils` built without nixpkgs' ALSA plugin bundle (pipewire, gstreamer, ffmpeg, …), which takes it from 812 MiB to 90 MiB.
   - `hw`, `dsnoop` and `null` are built into alsa-lib, so capture doesn't need the plugins.
 - `nix/module.nix` — the `services.needledrop` NixOS module.
-- `nix/test.nix` — the NixOS VM test. It records from a silent `/dev/zero` device, so no recognition and no network.
+- `nix/test.nix` — the NixOS VM test. It captures noise from a `snd-dummy` card, so playback starts and recognition
+  runs (and fails, with no network). It checks the OwnTone pipe gets audio and the Sendspin source listens and advertises.
 
 A release needs no change to the flake, which builds this repository's source and reads the version from `pyproject.toml`. Dependabot moves the flake's inputs in `flake.lock`. Moving to a new NixOS release branch is a manual edit of the `nixpkgs` URL in `flake.nix`.
 
 ## Adding a new output handler
 
-1. Create `needledrop/outputs/your_output.py` with a class implementing two async methods:
+1. Create `needledrop/outputs/your_output.py` with a class implementing the three events:
 
 ```python
 class YourOutput:
     async def on_track_recognized(self, track: TrackInfo) -> None:
         ...
 
+    async def on_playback_started(self) -> None:
+        ...
+
     async def on_playback_stopped(self) -> None:
         ...
 ```
+
+   Two more protocols in `outputs/base.py` are optional:
+
+   - **`AudioOutput`** — add `async def on_audio(self, chunk: AudioChunk)` to receive every captured chunk: 20 ms of
+     S16_LE stereo PCM at `audio.sample_rate`, with its capture time. It must not block for long; an output that falls 2 s
+     behind loses its oldest chunks.
+   - **`ServiceOutput`** — add `async def start(self)` and `async def stop(self)` for something that lives as long as the
+     app, such as a network listener. They run before the first event and on shutdown.
 
 2. Add a config dataclass in `needledrop/config.py`:
 
@@ -114,7 +155,7 @@ class YourOutputConfig:
     # your fields here
 ```
 
-Add it to `OutputsConfig`.
+Add it to `OutputsConfig` with `field(default_factory=YourOutputConfig)`, and parse it in `load_config`.
 
 3. Register it in `build_outputs()` in `needledrop/app.py`:
 

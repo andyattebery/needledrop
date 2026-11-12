@@ -4,10 +4,11 @@
 
 Audio fingerprinting service for vinyl record identification.
 
-Captures audio from an ALSA device, identifies tracks via [Shazam](https://www.shazam.com/), and dispatches results to pluggable output handlers:
+Captures audio continuously from an ALSA device, identifies tracks via [Shazam](https://www.shazam.com/), and dispatches the audio and the results to pluggable output handlers:
 
 - [Last.fm](https://www.last.fm/) scrobbling and now-playing
-- [OwnTone](https://owntone.github.io/owntone-server/) metadata pipe
+- [OwnTone](https://owntone.github.io/owntone-server/) audio pipe and metadata pipe
+- [Sendspin](https://www.sendspin-audio.com/) source, so [Music Assistant](https://www.music-assistant.io/) can play the turntable on any speaker
 - [Tuneshine](https://tuneshine.rocks/) LED matrix display
 - Structured logging
 
