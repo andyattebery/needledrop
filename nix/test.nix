@@ -31,6 +31,7 @@
 
     services.needledrop = {
       enable = true;
+      openFirewall = true;
       secretFiles.TUNESHINE_HOST = "/etc/needledrop-test-secret";
       settings = {
         audio = {
@@ -44,6 +45,7 @@
             enabled = true;
             audio_fifo = "/srv/media/Turntable";
           };
+          sendspin.enabled = true;
           tuneshine = {
             enabled = false;
             host = "$TUNESHINE_HOST";
@@ -60,7 +62,7 @@
     machine.fail("grep -q TUNESHINE_HOST /run/needledrop/config.yaml")
     machine.fail("grep -qa TUNESHINE_HOST /proc/$(systemctl show -p MainPID --value needledrop.service)/environ")
 
-    machine.wait_until_succeeds("journalctl -u needledrop.service | grep -q 'Started with 2 output(s)'")
+    machine.wait_until_succeeds("journalctl -u needledrop.service | grep -q 'Started with 3 output(s)'")
     machine.wait_until_succeeds("journalctl -u needledrop.service | grep -q 'Playback started'")
 
     # Recognition writes its window and, without network, fails with a warning rather than a traceback.
@@ -69,6 +71,11 @@
 
     # The OwnTone pipe gets the audio, though the hardened unit can't write anywhere under /srv.
     machine.succeed("test $(timeout 60 head -c 192000 /srv/media/Turntable | wc -c) -eq 192000")
+
+    # The Sendspin output listens, advertises itself over mDNS, and keeps its key readable by its owner only.
+    machine.wait_for_open_port(8928)
+    machine.wait_until_succeeds("journalctl -u needledrop.service | grep -q 'mDNS advertising client'")
+    machine.succeed("test $(stat -c %a /var/lib/needledrop/sendspin-identity.json) = 600")
 
     machine.sleep(5)
     machine.fail("journalctl -u needledrop.service | grep -E 'Audio capture failed|Traceback'")

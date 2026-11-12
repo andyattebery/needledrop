@@ -53,12 +53,22 @@ class LogConfig:
 
 
 @dataclass
+class SendspinConfig:
+    enabled: bool = False
+    name: str = "Turntable"
+    port: int = 8928
+    state_dir: str = "/var/lib/needledrop"
+    unpaired_access: bool = True
+
+
+@dataclass
 class OutputsConfig:
     lastfm: LastFMConfig
     owntone_metadata: OwnToneMetadataConfig
     tuneshine: TuneshineConfig
     log: LogConfig
     owntone_audio: OwnToneAudioConfig = field(default_factory=OwnToneAudioConfig)
+    sendspin: SendspinConfig = field(default_factory=SendspinConfig)
 
 
 @dataclass
@@ -88,6 +98,7 @@ def load_config(path: Path) -> Config:
         tuneshine=_build_dataclass(TuneshineConfig, outputs_raw.get("tuneshine")),
         log=_build_dataclass(LogConfig, outputs_raw.get("log")),
         owntone_audio=_build_dataclass(OwnToneAudioConfig, outputs_raw.get("owntone_audio")),
+        sendspin=_build_dataclass(SendspinConfig, outputs_raw.get("sendspin")),
     )
 
     return Config(

@@ -11,6 +11,10 @@ services:
       - /etc/asound.conf:/etc/asound.conf:ro
       - /etc/needledrop/config.yaml:/etc/needledrop/config.yaml:ro
       - /media:/media
+      - needledrop-state:/var/lib/needledrop
     tmpfs:
       - /run/needledrop
     restart: unless-stopped
+
+volumes:
+  needledrop-state:

@@ -15,6 +15,7 @@ dependencies = [
     "aiohttp",
     "pillow",
     "audioop-lts; python_version >= '3.13'",
+    "aiosendspin>=10.2,<11",
 ]
 
 [project.scripts]

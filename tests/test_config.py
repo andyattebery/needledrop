@@ -9,6 +9,7 @@ from needledrop.config import (
     OwnToneAudioConfig,
     OwnToneMetadataConfig,
     RecognitionConfig,
+    SendspinConfig,
     TuneshineConfig,
     _build_dataclass,
     load_config,
@@ -130,9 +131,16 @@ outputs:
 """)
     config = load_config(config_file)
     assert config.outputs.owntone_audio == OwnToneAudioConfig(enabled=False, audio_fifo="")
+    assert config.outputs.sendspin == SendspinConfig(
+        enabled=False,
+        name="Turntable",
+        port=8928,
+        state_dir="/var/lib/needledrop",
+        unpaired_access=True,
+    )
 
 
-def test_load_config_parses_owntone_audio(tmp_path):
+def test_load_config_parses_owntone_audio_and_sendspin(tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text("""
 audio:
@@ -147,9 +155,22 @@ outputs:
   owntone_audio:
     enabled: true
     audio_fifo: /srv/media/Turntable
+  sendspin:
+    enabled: true
+    name: Record Player
+    port: 9000
+    state_dir: /tmp/state
+    unpaired_access: false
 """)
     config = load_config(config_file)
     assert config.audio.silence_hold_seconds == 8
     assert config.outputs.owntone_audio == OwnToneAudioConfig(
         enabled=True, audio_fifo="/srv/media/Turntable"
+    )
+    assert config.outputs.sendspin == SendspinConfig(
+        enabled=True,
+        name="Record Player",
+        port=9000,
+        state_dir="/tmp/state",
+        unpaired_access=False,
     )

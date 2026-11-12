@@ -23,6 +23,7 @@ from needledrop.outputs.lastfm import LastFMOutput
 from needledrop.outputs.log import LogOutput
 from needledrop.outputs.owntone_audio import OwnToneAudioOutput
 from needledrop.outputs.owntone_metadata import OwnToneMetadataOutput
+from needledrop.outputs.sendspin import SendspinOutput
 from needledrop.outputs.tuneshine import TuneshineOutput
 from needledrop.recognition.shazamio_recognizer import ShazamIORecognizer
 
@@ -84,6 +85,9 @@ def build_outputs(config: Config, session: aiohttp.ClientSession) -> list[Output
 
     if cfg.owntone_audio.enabled:
         outputs.append(OwnToneAudioOutput(audio_fifo=cfg.owntone_audio.audio_fifo))
+
+    if cfg.sendspin.enabled:
+        outputs.append(SendspinOutput(cfg.sendspin, sample_rate=config.audio.sample_rate))
 
     return outputs
 
