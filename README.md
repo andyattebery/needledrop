@@ -9,6 +9,7 @@ Captures audio continuously from an ALSA device, identifies tracks via [Shazam](
 - [Last.fm](https://www.last.fm/) scrobbling and now-playing
 - [OwnTone](https://owntone.github.io/owntone-server/) audio pipe and metadata pipe
 - [Sendspin](https://www.sendspin-audio.com/) source, so [Music Assistant](https://www.music-assistant.io/) can play the turntable on any speaker
+- An Icecast-compatible MP3 stream, with the recognized track as its title, for internet radio players
 - [Tuneshine](https://tuneshine.rocks/) LED matrix display
 - Structured logging
 

@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "needledrop"
-version = "0.2.2"
+version = "0.3.0"
 description = "Audio fingerprinting service for vinyl record identification"
 requires-python = ">=3.12"
 license-files = ["LICENSE"]
@@ -16,6 +16,7 @@ dependencies = [
     "pillow",
     "audioop-lts; python_version >= '3.13'",
     "aiosendspin>=10.2,<11",
+    "lameenc>=1.9",
 ]
 
 [project.scripts]

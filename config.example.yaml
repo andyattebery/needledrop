@@ -29,6 +29,12 @@ outputs:
     port: 8928
     state_dir: /var/lib/needledrop
     unpaired_access: true
+  mp3_stream:
+    enabled: true
+    port: 8000
+    path: /turntable.mp3
+    name: Turntable
+    bitrate: 320
   tuneshine:
     enabled: true
     host: "192.168.1.120"

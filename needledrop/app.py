@@ -23,6 +23,7 @@ from needledrop.models import AudioChunk, TrackInfo
 from needledrop.outputs.base import AudioOutput, OutputHandler, ServiceOutput
 from needledrop.outputs.lastfm import LastFMOutput
 from needledrop.outputs.log import LogOutput
+from needledrop.outputs.mp3_stream import Mp3StreamOutput
 from needledrop.outputs.owntone_audio import OwnToneAudioOutput
 from needledrop.outputs.owntone_metadata import OwnToneMetadataOutput
 from needledrop.outputs.sendspin import SendspinOutput
@@ -90,6 +91,9 @@ def build_outputs(config: Config, session: aiohttp.ClientSession) -> list[Output
 
     if cfg.sendspin.enabled:
         outputs.append(SendspinOutput(cfg.sendspin, sample_rate=config.audio.sample_rate))
+
+    if cfg.mp3_stream.enabled:
+        outputs.append(Mp3StreamOutput(cfg.mp3_stream, sample_rate=config.audio.sample_rate))
 
     return outputs
 

@@ -62,6 +62,17 @@ class SendspinConfig:
 
 
 @dataclass
+class Mp3StreamConfig:
+    enabled: bool = False
+    port: int = 8000
+    path: str = "/turntable.mp3"
+    # The station name (icy-name), and the title while no track is known.
+    name: str = "Turntable"
+    # kbit/s, constant.
+    bitrate: int = 320
+
+
+@dataclass
 class OutputsConfig:
     lastfm: LastFMConfig
     owntone_metadata: OwnToneMetadataConfig
@@ -69,6 +80,7 @@ class OutputsConfig:
     log: LogConfig
     owntone_audio: OwnToneAudioConfig = field(default_factory=OwnToneAudioConfig)
     sendspin: SendspinConfig = field(default_factory=SendspinConfig)
+    mp3_stream: Mp3StreamConfig = field(default_factory=Mp3StreamConfig)
 
 
 @dataclass
@@ -99,6 +111,7 @@ def load_config(path: Path) -> Config:
         log=_build_dataclass(LogConfig, outputs_raw.get("log")),
         owntone_audio=_build_dataclass(OwnToneAudioConfig, outputs_raw.get("owntone_audio")),
         sendspin=_build_dataclass(SendspinConfig, outputs_raw.get("sendspin")),
+        mp3_stream=_build_dataclass(Mp3StreamConfig, outputs_raw.get("mp3_stream")),
     )
 
     return Config(

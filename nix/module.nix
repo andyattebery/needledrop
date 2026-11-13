@@ -17,6 +17,11 @@ let
   sendspin = cfg.settings.outputs.sendspin or { };
   sendspinEnabled = sendspin.enabled or false;
   sendspinPort = sendspin.port or 8928;
+
+  # openFirewall opens the MP3 stream's port too.
+  mp3Stream = cfg.settings.outputs.mp3_stream or { };
+  mp3StreamEnabled = mp3Stream.enabled or false;
+  mp3StreamPort = mp3Stream.port or 8000;
 in
 {
   options.services.needledrop = {
@@ -111,8 +116,9 @@ in
       type = lib.types.bool;
       default = false;
       description = ''
-        Whether to open the firewall for the Sendspin output: its port over TCP, and mDNS on 5353/udp, which is how
-        Music Assistant finds it. Has no effect unless `outputs.sendspin.enabled` is set.
+        Whether to open the firewall for the outputs that listen: the Sendspin output's port over TCP and mDNS on
+        5353/udp, which is how Music Assistant finds it, and the MP3 stream's port over TCP. Each is opened only while
+        its output is enabled (`outputs.sendspin.enabled`, `outputs.mp3_stream.enabled`).
       '';
     };
 
@@ -137,9 +143,10 @@ in
       message = "services.needledrop.secretFiles: \"${name}\" is not a valid variable name.";
     }) cfg.secretFiles;
 
-    networking.firewall = lib.mkIf (cfg.openFirewall && sendspinEnabled) {
-      allowedTCPPorts = [ sendspinPort ];
-      allowedUDPPorts = [ 5353 ];
+    networking.firewall = lib.mkIf cfg.openFirewall {
+      allowedTCPPorts =
+        lib.optional sendspinEnabled sendspinPort ++ lib.optional mp3StreamEnabled mp3StreamPort;
+      allowedUDPPorts = lib.optional sendspinEnabled 5353;
     };
 
     users.users.needledrop = {

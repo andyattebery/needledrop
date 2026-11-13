@@ -95,6 +95,16 @@ needledrop captures without a break. Playback starts once there has been 0.1 s o
 | `state_dir` | str | `/var/lib/needledrop` | Directory for the device's key and pairing records. It must persist across restarts |
 | `unpaired_access` | bool | `true` | Let a server use the source once its operator approves it, without pairing |
 
+### outputs.mp3_stream
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable the MP3 stream |
+| `port` | int | `8000` | Port the stream is served on, on every network interface |
+| `path` | str | `/turntable.mp3` | The stream's path in its URL. Any other path gets a 404 |
+| `name` | str | `Turntable` | The station's name (`icy-name`), and the title while no track is known |
+| `bitrate` | int | `320` | MP3 bitrate in kbit/s, constant |
+
 ## Docker setup
 
 The `docker-compose.yml` configures the container for audio access:
@@ -124,8 +134,8 @@ volumes:
 
 Key settings:
 
-- **`network_mode: host`** — required for accessing network services (OwnTone, Tuneshine) on the local network, and
-  for the Sendspin source's mDNS advertisement and port
+- **`network_mode: host`** — required for accessing network services (OwnTone, Tuneshine) on the local network, for
+  the Sendspin source's mDNS advertisement and port, and for the MP3 stream's port
 - **`ipc: host`** — required for ALSA `dsnoop` shared memory segments
 - **`/dev/snd`** — audio device passthrough
 - **`audio` group** — permissions for audio devices
@@ -202,8 +212,9 @@ services.needledrop = {
 
 `audio.alsa_device` is required. Unless you set them, the module uses `sample_rate` 48000, `sample_duration_seconds` 12, `interval_seconds` 20 and `min_track_change_seconds` 30.
 
-With the Sendspin source enabled, set `services.needledrop.openFirewall = true` unless you open the ports yourself. It
-opens the source's port over TCP and mDNS on 5353/udp.
+With the Sendspin source or the MP3 stream enabled, set `services.needledrop.openFirewall = true` unless you open the
+ports yourself. For whichever is enabled, it opens the Sendspin source's port over TCP and mDNS on 5353/udp, and the MP3
+stream's port over TCP.
 
 ### Secrets
 
@@ -282,12 +293,43 @@ it under Live Inputs by its `name`. Play it on any player or group from there.
   Music Assistant, and putting the needle down starts playback there. Music Assistant stops it again after a minute
   without signal.
 - **Audio only.** Sendspin's source role has no field for track information, so Music Assistant shows the input's name,
-  not the track. The other outputs still get the recognized tracks.
+  not the track. The other outputs still get the recognized tracks, and Music Assistant shows them when it plays the
+  [MP3 stream](#mp3-stream-icecast-compatible) instead.
 - **State.** The device's key in `state_dir` is its identity. If the key is lost, Music Assistant sees a new device to
   approve or pair again.
 
 The audio is PCM at `audio.sample_rate`, 16-bit stereo: about 1.5 Mbit/s at 48 kHz. needledrop sends it only while
 Music Assistant is playing the input.
+
+## MP3 stream (Icecast-compatible)
+
+The MP3 stream output serves the turntable at `http://<host>:<port><path>`, by default
+`http://<host>:8000/turntable.mp3`. It answers as an Icecast server does, so internet radio players can play it, such
+as VLC, a browser, a phone's radio app or Music Assistant.
+
+- **Titles and art.** A player that asks for ICY metadata, as radio players do, gets the recognized track as the
+  stream's title, `Artist - Title`, along with the album art's URL. While no track is known, including between
+  records, the title is `name`.
+- **Music Assistant** gets the title as `"Title" by Artist from "Album"` instead, the one form it reads an album from,
+  so it shows the title, artist, album and art. needledrop tells it from other players by its User-Agent.
+- **The audio** is MP3 at a constant `bitrate`, at `audio.sample_rate`. That has to be a rate MP3 carries: 32000, 44100
+  or 48000 Hz, or one of the lower rates from 8000 to 24000 Hz, which take at most 160 kbit/s. needledrop won't start
+  with any other. Capture never stops, so between records the stream carries the turntable's silence and players stay
+  connected.
+- **Only while someone listens.** needledrop encodes only while a player is connected.
+- **Slow players.** A player more than 512 KiB behind, about 13 s at 320 kbit/s, is disconnected, as Icecast does.
+- **No authentication.** Anyone who can reach the port can listen, so serve it only on a network you trust.
+- **Behind a reverse proxy,** turn off response buffering for the stream (`proxy_buffering off;` in nginx), or the
+  proxy holds the audio back.
+
+To play it in Music Assistant:
+
+1. Add the stream's URL as a radio station.
+2. Turn off volume normalization for the player or group that plays it. Music Assistant normalizes radio by default,
+   which reshapes the record's dynamics.
+3. Play the station only while needledrop is running. Music Assistant checks a station's URL when it plays it, and
+   reuses the answer for 3 hours. If needledrop was down when it checked, Music Assistant plays the stream without
+   titles until it checks again.
 
 ## Tuneshine
 

@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import socket
 import stat
 import struct
 import time
@@ -18,6 +17,7 @@ from aiosendspin.server import (
 )
 from aiosendspin.server.server import SendspinServer
 
+from helpers import free_port, wait_for
 from needledrop.config import SendspinConfig
 from needledrop.models import AudioChunk
 from needledrop.outputs.sendspin import IDENTITY_FILE, SendspinOutput, load_identity
@@ -46,18 +46,6 @@ async def test_events_and_audio_before_start_are_ignored(tmp_path):
     await output.on_playback_stopped()
     await output.on_track_recognized(None)
     await output.on_audio(AudioChunk(pcm=bytes(3840), captured_at=time.monotonic()))
-
-
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
-async def wait_for(predicate, timeout: float = 10.0) -> None:
-    async with asyncio.timeout(timeout):
-        while not predicate():
-            await asyncio.sleep(0.01)
 
 
 @pytest.fixture

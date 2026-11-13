@@ -155,6 +155,15 @@ async def test_build_outputs_adds_owntone_audio_and_sendspin(mock_network, sampl
     assert all(isinstance(o, AudioOutput) for o in outputs[-2:])
 
 
+@patch("needledrop.outputs.lastfm.pylast.LastFMNetwork")
+async def test_build_outputs_adds_mp3_stream(mock_network, sample_config, mock_session):
+    sample_config.outputs.mp3_stream.enabled = True
+    outputs = build_outputs(sample_config, mock_session)
+    assert type(outputs[-1]).__name__ == "Mp3StreamOutput"
+    assert isinstance(outputs[-1], ServiceOutput)
+    assert isinstance(outputs[-1], AudioOutput)
+
+
 async def test_safe_call_catches_exceptions(caplog):
     async def failing():
         raise ValueError("boom")

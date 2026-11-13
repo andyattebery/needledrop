@@ -5,6 +5,7 @@ from needledrop.config import (
     Config,
     LastFMConfig,
     LogConfig,
+    Mp3StreamConfig,
     OutputsConfig,
     OwnToneAudioConfig,
     OwnToneMetadataConfig,
@@ -137,6 +138,41 @@ outputs:
         port=8928,
         state_dir="/var/lib/needledrop",
         unpaired_access=True,
+    )
+    assert config.outputs.mp3_stream == Mp3StreamConfig(
+        enabled=False,
+        port=8000,
+        path="/turntable.mp3",
+        name="Turntable",
+        bitrate=320,
+    )
+
+
+def test_load_config_parses_mp3_stream(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("""
+audio:
+  alsa_device: hw:0
+  sample_rate: 48000
+  sample_duration_seconds: 12
+recognition:
+  interval_seconds: 20
+  min_track_change_seconds: 30
+outputs:
+  mp3_stream:
+    enabled: true
+    port: 8100
+    path: /vinyl.mp3
+    name: Record Player
+    bitrate: 192
+""")
+    config = load_config(config_file)
+    assert config.outputs.mp3_stream == Mp3StreamConfig(
+        enabled=True,
+        port=8100,
+        path="/vinyl.mp3",
+        name="Record Player",
+        bitrate=192,
     )
 
 
